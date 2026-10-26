@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erkin tushish simulyatsiyasi (havo qarshiligi bilan)</title>
+<style>
+:root{--surface-1:#f4f3ee;--text-primary:#1f1f1d;--text-secondary:#5f5e5a;--border:#dddcd4;--border-strong:#bbb9ae;--border-stronger:#999;--radius:8px;color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root{--surface-1:#262624;--text-primary:#f0efec;--text-secondary:#c3c2b7;--border:#3a3a37;--border-strong:#55554f;--border-stronger:#77776f}}
+body{margin:0;padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text-primary);background:Canvas;max-width:520px;margin-inline:auto;line-height:1.5}
+h1{font-size:20px;font-weight:500;margin:0 0 4px}
+p.sub{font-size:14px;color:var(--text-secondary);margin:0 0 14px}
+.b{font:inherit;font-size:14px;padding:8px 12px;cursor:pointer;background:transparent;color:var(--text-primary);border:1px solid var(--border-strong);border-radius:var(--radius)}
+.b:hover{background:var(--surface-1)}
+.m{background:var(--surface-1);border-radius:var(--radius);padding:10px 12px}
+.m span{display:block;font-size:12px;color:var(--text-secondary)}
+.m b{font-size:20px;font-weight:500}
+.lg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--text-secondary);margin:0 0 8px}
+.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+canvas{display:block;width:100%}
+input[type=range]{flex:1}
+</style>
+</head>
+<body>
+<h1>Erkin tushish: havo qarshiligi bilan</h1>
+<p class="sub">Vakuum, temir shar (5 kg) va yog'och shar (1 kg) bir vaqtda tushadi. g = 9,8 m/s²</p>
+
+<div style="display:flex;gap:8px;margin:0 0 10px">
+  <button class="b" id="go" style="flex:1">Boshlash</button>
+  <button class="b" id="rs" style="flex:1">Qayta</button>
+  <button class="b" id="sp" style="flex:1">Tezlik 1×</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:10px;margin:0 0 10px">
+  <label for="ts" style="font-size:14px;color:var(--text-secondary)">t</label>
+  <input type="range" id="ts" min="0" max="4" step="0.01" value="0">
+  <span style="font-size:14px;font-weight:500;min-width:48px;text-align:right" id="to">0,00 s</span>
+</div>
+
+<div class="lg">
+  <span><i style="background:#888780"></i>Vakuum (havo yo'q)</span>
+  <span><i style="background:#D85A30"></i>Temir shar 5 kg</span>
+  <span><i style="background:#1D9E75"></i>Yog'och shar 1 kg</span>
+</div>
+
+<div><canvas id="a" role="img" aria-label="Vakuumda, havoda temir shar va yog'och shar tushishi" style="height:300px"></canvas></div>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 14px">
+  <div class="m"><span>Temir: tezlik v</span><b id="v1">0,0 m/s</b></div>
+  <div class="m"><span>Yog'och: tezlik v</span><b id="v2">0,0 m/s</b></div>
+  <div class="m"><span>Temir: yo'l s</span><b id="s1">0,0 m</b></div>
+  <div class="m"><span>Yog'och: yo'l s</span><b id="s2">0,0 m</b></div>
+</div>
+
+<div><canvas id="gv" role="img" aria-label="Tezlik va vaqt grafigi" style="height:200px"></canvas></div>
+<div style="margin-top:8px"><canvas id="gs" role="img" aria-label="Yo'l va vaqt grafigi" style="height:200px"></canvas></div>
+
+<script>
+const g=9.8,TT=4,HM=0.5*g*TT*TT,VM=g*TT;
+const B=[
+ {n:'Vakuum',vt:Infinity,c:'#888780'},
+ {n:'Temir',vt:50,c:'#D85A30'},
+ {n:"Yog'och",vt:Math.sqrt(500),c:'#1D9E75'}
+];
+const vel=(b,q)=>isFinite(b.vt)?b.vt*Math.tanh(g*q/b.vt):g*q;
+const pos=(b,q)=>isFinite(b.vt)?b.vt*b.vt/g*Math.log(Math.cosh(g*q/b.vt)):0.5*g*q*q;
+const ca=document.getElementById('a'),cv=document.getElementById('gv'),cs=document.getElementById('gs');
+let t=0,run=false,last=0,raf=0,sp=1;
+function css(n,f){const v=getComputedStyle(document.documentElement).getPropertyValue(n).trim();return v||f}
+function ctx(c,h){const d=window.devicePixelRatio||1,w=c.parentElement.clientWidth||380;c.width=w*d;c.height=h*d;const x=c.getContext('2d');x.scale(d,d);return [x,w]}
+function fmt(n,d){return n.toFixed(d).replace('.',',')}
+function drawA(){
+  const [x,W]=ctx(ca,300),top=34,gh=230,tc=css('--text-secondary','#666'),pr=css('--text-primary','#222');
+  const cols=[W*0.2,W*0.5,W*0.8];
+  x.font='12px sans-serif';x.textAlign='center';
+  x.strokeStyle=pr;x.lineWidth=3;x.beginPath();x.moveTo(10,top+gh+11);x.lineTo(W-10,top+gh+11);x.stroke();
+  B.forEach((b,i)=>{
+    const cx=cols[i];
+    x.fillStyle=b.c;x.fillText(b.n,cx,16);
+    const y=top+gh*pos(b,t)/HM;
+    x.strokeStyle='#B4B2A9';x.setLineDash([3,3]);x.lineWidth=1;x.beginPath();x.moveTo(cx,top);x.lineTo(cx,y);x.stroke();x.setLineDash([]);
+    for(let k=1;k<=4;k++)if(k<=t+1e-9){
+      const yk=top+gh*pos(b,k)/HM;
+      x.fillStyle=b.c;x.globalAlpha=.3;x.beginPath();x.arc(cx,yk,6,0,7);x.fill();x.globalAlpha=1;
+      x.fillStyle=tc;x.textAlign='left';x.fillText(k+' s',cx+12,yk+4);x.textAlign='center';
+    }
+    if(i===0){x.strokeStyle=b.c;x.lineWidth=2;x.beginPath();x.arc(cx,y,10,0,7);x.stroke()}
+    else{x.fillStyle=b.c;x.beginPath();x.arc(cx,y,10,0,7);x.fill()}
+  });
+}
+function drawG(c,mode){
+  const [x,W]=ctx(c,200),L=44,R=14,Tp=22,Bm=28,h=200,pw=W-L-R,ph=h-Tp-Bm;
+  const ym=mode==='v'?VM:HM,f=(b,q)=>mode==='v'?vel(b,q):pos(b,q);
+  const px=q=>L+pw*q/TT,py=u=>Tp+ph*(1-u/ym),tc=css('--text-secondary','#666');
+  x.font='12px sans-serif';x.fillStyle=tc;x.textAlign='left';
+  x.fillText(mode==='v'?'v – t grafik':'s – t grafik',L,13);
+  x.strokeStyle=css('--border','#ddd');x.lineWidth=1;
+  for(let i=1;i<=4;i++){const yy=Tp+ph*i/4;x.beginPath();x.moveTo(L,yy);x.lineTo(W-R,yy);x.stroke()}
+  x.strokeStyle=css('--border-stronger','#999');x.beginPath();x.moveTo(L,Tp);x.lineTo(L,Tp+ph);x.lineTo(W-R,Tp+ph);x.stroke();
+  x.fillStyle=tc;x.textAlign='right';x.fillText('0',L-6,Tp+ph+4);x.fillText(fmt(ym,1),L-6,Tp+8);
+  x.textAlign='center';for(let k=1;k<=4;k++)x.fillText(k,px(k),Tp+ph+16);
+  x.textAlign='right';x.fillText('t, s',W-R,Tp+ph+16);
+  x.textAlign='left';x.fillText(mode==='v'?'v, m/s':'s, m',L+6,Tp+12);
+  B.forEach((b,i)=>{
+    x.setLineDash([4,4]);x.strokeStyle='#B4B2A9';x.globalAlpha=.6;x.lineWidth=1;x.beginPath();
+    for(let j=0;j<=60;j++){const q=TT*j/60;j?x.lineTo(px(q),py(f(b,q))):x.moveTo(px(q),py(f(b,q)))}x.stroke();x.setLineDash([]);x.globalAlpha=1;
+    if(t>0){x.strokeStyle=b.c;x.lineWidth=i===0?2:2.5;if(i===0)x.setLineDash([6,3]);x.beginPath();const n=Math.max(1,Math.round(60*t/TT));
+      for(let j=0;j<=n;j++){const q=t*j/n;j?x.lineTo(px(q),py(f(b,q))):x.moveTo(px(q),py(f(b,q)))}x.stroke();x.setLineDash([])}
+    x.fillStyle=b.c;x.beginPath();x.arc(px(t),py(f(b,t)),4.5,0,7);x.fill();
+  });
+}
+function upd(){
+  const A=B[1],Y=B[2];
+  document.getElementById('to').textContent=fmt(t,2)+' s';
+  document.getElementById('v1').textContent=fmt(vel(A,t),1)+' m/s';
+  document.getElementById('v2').textContent=fmt(vel(Y,t),1)+' m/s';
+  document.getElementById('s1').textContent=fmt(pos(A,t),1)+' m';
+  document.getElementById('s2').textContent=fmt(pos(Y,t),1)+' m';
+  document.getElementById('ts').value=t;
+  drawA();drawG(cv,'v');drawG(cs,'s');
+}
+function lab(){document.getElementById('go').textContent=run?'Pauza':(t>0&&t<TT?'Davom':'Boshlash')}
+function tick(ts){
+  if(!run)return;
+  const dt=Math.min((ts-last)/1000,0.05)*sp;last=ts;t+=dt;
+  if(t>=TT){t=TT;run=false}
+  upd();lab();
+  if(run)raf=requestAnimationFrame(tick);
+}
+document.getElementById('go').onclick=()=>{
+  if(run){run=false;lab();return}
+  if(t>=TT)t=0;
+  run=true;last=performance.now();lab();raf=requestAnimationFrame(tick)
+};
+document.getElementById('rs').onclick=()=>{run=false;cancelAnimationFrame(raf);t=0;upd();lab()};
+document.getElementById('sp').onclick=e=>{sp=sp===1?0.25:1;e.target.textContent='Tezlik '+(sp===1?'1×':'0,25×')};
+document.getElementById('ts').oninput=e=>{run=false;t=+e.target.value;upd();lab()};
+window.addEventListener('resize',upd);
+upd();
+</script>
+</body>
+</html>
